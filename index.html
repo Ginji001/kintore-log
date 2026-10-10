@@ -658,7 +658,8 @@ function renderMore(){
   });
   h+="</div></div></section>";
   h+='<section class="sec"><h2>バックアップ</h2><p>全期間の記録と設定をJSONで書き出せます。機種変更のときは、新しい端末で「バックアップから戻す」を使ってください。</p><div class="actions" style="margin:0">'+
-     '<button class="btn" data-act="export">ファイルに書き出す</button><button class="btn" data-act="showJson">JSONを表示</button></div>'+
+     '<button class="btn" data-act="export">ファイルに書き出す</button><button class="btn" data-act="showJson">JSONを表示</button><button class="btn" data-act="csv">CSVで書き出す</button></div>'+
+     '<p class="note">CSVは1セット1行（日付・曜日・種目・部位・セット・重量・回数・単位・体感・メモ）。表計算アプリで開けます。戻すときはJSONを使ってください。</p>'+
      '<textarea id="json" style="display:none;margin-top:10px;min-height:160px;font-family:Jost,monospace;font-size:12px" aria-label="バックアップJSON"></textarea>'+
      '<label class="lbl" for="impFile">バックアップから戻す</label><input type="file" id="impFile" data-f="file" accept=".json,application/json" style="font-size:13px;color:var(--mute)">'+
      '<label class="lbl" for="imp">またはJSONを貼り付け</label><textarea id="imp" placeholder="{&quot;months&quot;: …}"></textarea>'+
@@ -926,7 +927,26 @@ function handleAct(b){
     (store.mode==="idb"?Promise.all(ks.map(function(n){return idb.tx("readwrite",function(st){st.delete(n);});})):Promise.resolve()).catch(function(){}).then(function(){view="rec";curDate=today;go();});
     return;
   }
-  if(["showJson","export","import"].indexOf(a)<0){day=getDay(curDate,true);if(!day) return;}
+  if(a==="csv"){buildBackup().then(function(bk){
+    var q=function(v){v=v==null?"":String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
+    var rows=[["日付","曜日","種目","部位","セット","重量kg","回数","単位","体感","メモ"]];
+    Object.keys(bk.months).sort().forEach(function(k){
+      var ds=bk.months[k].days||{};
+      Object.keys(ds).sort().forEach(function(d){
+        var dy=ds[d],first=true;
+        (dy.entries||[]).forEach(function(e){
+          var info=exInfo(e.ex);
+          doneSets(e).forEach(function(st,n){
+            rows.push([d,DOW[parse(d).getDay()],e.ex,info.p,n+1,st.w===""||st.w==null?"":st.w,st.r,info.u,e.feel||"",first?(dy.note||""):""]);first=false;
+          });
+        });
+      });
+    });
+    var data="\ufeff"+rows.map(function(r){return r.map(q).join(",");}).join("\r\n")+"\r\n";
+    var url=URL.createObjectURL(new Blob([data],{type:"text/csv"})),a3=document.createElement("a");
+    a3.href=url;a3.download="kintore-log-"+today+".csv";document.body.appendChild(a3);a3.click();a3.remove();setTimeout(function(){URL.revokeObjectURL(url);},2000);
+  }).catch(function(){});return;}
+  if(["showJson","export","import","csv"].indexOf(a)<0){day=getDay(curDate,true);if(!day) return;}
   if(a==="delEntry"){
     if(!confirm(day.entries[i].ex+"をこの日の記録から削除しますか？")) return;
     day.entries.splice(i,1);saveDay(curDate);renderRec();return;
